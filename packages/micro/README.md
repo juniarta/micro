@@ -2,9 +2,9 @@
 
 _**Micro** — Asynchronous HTTP microservices_
 
-[![Build Status](https://travis-ci.org/zeit/micro.svg?branch=master)](https://travis-ci.org/zeit/micro)
-[![Coverage Status](https://coveralls.io/repos/github/zeit/micro/badge.svg?branch=master)](https://coveralls.io/github/zeit/micro?branch=master)
-[![Join the community on Spectrum](https://withspectrum.github.io/badge/badge.svg)](https://spectrum.chat/micro)
+[![CircleCI](https://circleci.com/gh/zeit/micro/tree/master.svg?style=shield)](https://circleci.com/gh/zeit/micro/tree/master)
+[![Install Size](https://packagephobia.now.sh/badge?p=micro)](https://packagephobia.now.sh/result?p=micro)
+[![Join the community on Spectrum](https://withspectrum.github.io/badge/badge.svg)](https://spectrum.chat/zeit)
 
 ## Features
 
@@ -17,7 +17,7 @@ _**Micro** — Asynchronous HTTP microservices_
 * **Explicit**: No middleware - modules declare all [dependencies](https://github.com/amio/awesome-micro)
 * **Lightweight**: With all dependencies, the package weighs less than a megabyte
 
-## Usage
+## Installation
 
 **Important:** Micro is only meant to be used in production. In development, you should use [micro-dev](https://github.com/zeit/micro-dev), which provides you with a tool belt specifically tailored for developing microservices.
 
@@ -27,7 +27,9 @@ To prepare your microservice for running in the production environment, firstly 
 npm install --save micro
 ```
 
-Then create an `index.js` file and populate it with function, that accepts standard [http.IncomingMessage](https://nodejs.org/api/http.html#http_class_http_incomingmessage) and [http.ServerResponse](https://nodejs.org/api/http.html#http_class_http_serverresponse) objects:
+## Usage
+
+Create an `index.js` file and export a function that accepts the standard [http.IncomingMessage](https://nodejs.org/api/http.html#http_class_http_incomingmessage) and [http.ServerResponse](https://nodejs.org/api/http.html#http_class_http_serverresponse) objects:
 
 ```js
 module.exports = (req, res) => {
@@ -60,6 +62,50 @@ npm start
 
 And go to this URL: `http://localhost:3000` - 🎉
 
+### Command line
+
+```
+  micro - Asynchronous HTTP microservices
+
+  USAGE
+
+      $ micro --help
+      $ micro --version
+      $ micro [-l listen_uri [-l ...]] [entry_point.js]
+
+      By default micro will listen on 0.0.0.0:3000 and will look first
+      for the "main" property in package.json and subsequently for index.js
+      as the default entry_point.
+
+      Specifying a single --listen argument will overwrite the default, not supplement it.
+
+  OPTIONS
+
+      --help                              shows this help message
+
+      -v, --version                       displays the current version of micro
+
+      -l, --listen listen_uri             specify a URI endpoint on which to listen (see below) -
+                                          more than one may be specified to listen in multiple places
+
+  ENDPOINTS
+
+      Listen endpoints (specified by the --listen or -l options above) instruct micro
+      to listen on one or more interfaces/ports, UNIX domain sockets, or Windows named pipes.
+
+      For TCP (traditional host/port) endpoints:
+
+          $ micro -l tcp://hostname:1234
+
+      For UNIX domain socket endpoints:
+
+          $ micro -l unix:/path/to/socket.sock
+
+      For Windows named pipe endpoints:
+
+          $ micro -l pipe:\\.\pipe\PipeName
+```
+
 ### `async` & `await`
 
 <p><details>
@@ -78,49 +124,23 @@ module.exports = async (req, res) => {
 }
 ```
 
-### Transpilation
-
-The package takes advantage of native support for `async` and `await`, which is available as of **Node.js 8.0.0**! In turn, we suggest either using at least this version both in development and production (if possible), or transpiling the code using [async-to-gen](https://github.com/leebyron/async-to-gen), if you can't use the latest Node.js version.
-
-In order to do that, you firstly need to install it:
-
-```bash
-npm install --save async-to-gen
-```
-
-And then add the transpilation command to the `scripts.build` property inside `package.json`:
-
-```json
-{
-  "scripts": {
-    "build": "async-to-gen input.js > output.js"
-  }
-}
-```
-
-Once these two steps are done, you can transpile the code by running this command:
-
-```bash
-npm run build
-```
-
-That's all it takes to transpile by yourself. But just to be clear: **Only do this if you can't use Node.js 8.0.0**! If you can, `async` and `await` will just work right out of the box.
-
 ### Port Based on Environment Variable
 
 When you want to set the port using an environment variable you can use:
 
 ```
-micro -p $PORT
+micro -l tcp://0.0.0.0:$PORT
 ```
 
 Optionally you can add a default if it suits your use case:
 
 ```
-micro -p ${PORT:-3000}
+micro -l tcp://0.0.0.0:${PORT-3000}
 ```
 
-`${PORT:-3000}` will allow a fallback to port `3000` when `$PORT` is not defined.
+`${PORT-3000}` will allow a fallback to port `3000` when `$PORT` is not defined.
+
+Note that this only works in Bash.
 
 ### Body parsing
 
@@ -196,13 +216,14 @@ module.exports = async (req, res) => {
 You can use Micro programmatically by requiring Micro directly:
 
 ```js
+const http = require('http')
 const micro = require('micro')
 const sleep = require('then-sleep')
 
-const server = micro(async (req, res) => {
+const server = new http.Server(micro(async (req, res) => {
   await sleep(500)
   return 'Hello world'
-})
+}))
 
 server.listen(3000)
 ```
@@ -211,7 +232,7 @@ server.listen(3000)
 
 - This function is exposed as the `default` export.
 - Use `require('micro')`.
-- Returns a [`http.Server`](https://nodejs.org/dist/latest-v6.x/docs/api/http.html#http_class_http_server) that uses the provided `function` as the request handler.
+- Returns a function with the `(req, res) => void` signature. That uses the provided `function` as the request handler.
 - The supplied function is run with `await`. So it can be `async`
 
 ##### sendError(req, res, error)
@@ -305,17 +326,18 @@ Micro makes tests compact and a pleasure to read and write.
 We recommend [ava](https://github.com/sindresorhus/ava), a highly parallel Micro test framework with built-in support for async tests:
 
 ```js
+const http = require('http')
 const micro = require('micro')
 const test = require('ava')
 const listen = require('test-listen')
 const request = require('request-promise')
 
 test('my endpoint', async t => {
-  const service = micro(async (req, res) => {
+  const service = new http.Server(micro(async (req, res) => {
     micro.send(res, 200, {
       test: 'woot'
     })
-  })
+  }))
 
   const url = await listen(service)
   const body = await request(url)
